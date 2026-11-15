@@ -9,14 +9,17 @@ export type Params = {
   fade: number; // 0..1
   grain: number; // 0..1
   vignette: number; // 0..1
+  split: number; // 0..1 teal shadows / warm highlights
 };
 
 export type FrameStyle = "none" | "white" | "film" | "polaroid";
 
-export const ZERO: Params = { exposure: 0, contrast: 0, saturation: 0, warmth: 0, tint: 0, fade: 0, grain: 0, vignette: 0 };
+export const ZERO: Params = { exposure: 0, contrast: 0, saturation: 0, warmth: 0, tint: 0, fade: 0, grain: 0, vignette: 0, split: 0 };
 
 export const LOOKS: { id: LookId; name: string; params: Params }[] = [
-  { id: "clean", name: "Clean", params: { ...ZERO } },
+  { id: "clean", name: "Clean", params: { ...ZERO, contrast: 0.06, saturation: 0.04 } },
+  { id: "moody", name: "Moody", params: { ...ZERO, exposure: -0.18, contrast: 0.28, saturation: -0.28, warmth: -0.05, fade: 0.1, vignette: 0.38, split: 0.25 } },
+  { id: "cinematic", name: "Cinematic", params: { ...ZERO, exposure: -0.04, contrast: 0.22, saturation: -0.05, fade: 0.06, vignette: 0.2, split: 0.6 } },
   { id: "harbor", name: "Harbor", params: { ...ZERO, exposure: 0.05, contrast: 0.15, saturation: -0.15, warmth: -0.4, tint: -0.05, fade: 0.08 } },
   { id: "dusk", name: "Dusk", params: { ...ZERO, exposure: -0.05, contrast: 0.22, saturation: 0.15, warmth: 0.45, tint: 0.12, fade: 0.12, vignette: 0.3 } },
   { id: "press", name: "Press", params: { ...ZERO, exposure: 0.04, contrast: 0.45, saturation: 0.28, vignette: 0.15 } },
@@ -38,6 +41,7 @@ export function combine(a: Params, b: Params): Params {
     fade: c(a.fade + b.fade, 0, 1),
     grain: c(a.grain + b.grain, 0, 1),
     vignette: c(a.vignette + b.vignette, 0, 1),
+    split: c(a.split + b.split, 0, 1),
   };
 }
 
@@ -86,6 +90,7 @@ function applyParams(ctx: CanvasRenderingContext2D, w: number, h: number, p: Par
   const sat = 1 + p.saturation;
   const grain = p.grain * 38;
   const vig = p.vignette * 0.65;
+  const split = p.split * 0.16;
   const cx = w / 2;
   const cy = h / 2;
   const maxD = Math.hypot(cx, cy);
@@ -102,6 +107,12 @@ function applyParams(ctx: CanvasRenderingContext2D, w: number, h: number, p: Par
         r = l + (r - l) * sat;
         g = l + (g - l) * sat;
         b = l + (b - l) * sat;
+      }
+      if (split > 0) {
+        const l = (r * 0.2126 + g * 0.7152 + b * 0.0722 - 128) * split; // + highlights warm, - shadows teal
+        r += l;
+        g += l * 0.15;
+        b -= l * 1.1;
       }
       let m = 1;
       if (vig > 0) {
