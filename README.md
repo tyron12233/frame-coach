@@ -1,14 +1,13 @@
 # Frame Coach
 
-An AI camera coach for Instagram-worthy photos of places, food and products. Pick a vibe (Clean, Moody, Cinematic, Film, Bright) and tap ✦. Claude looks at the scene and coaches you like a photographer: where to stand, how high to hold the phone and how to tilt it. Then it finds the best crop, guides the phone to it and zooms in, so you just press the shutter.
+An AI camera that finds the most Instagram-worthy shot in your scene. Pick a vibe (Clean, Moody, Cinematic, Film, Bright) and tap ✦. Claude picks the best photo hidden in the wide view and draws a yellow box around it. The box stays pinned to the scene as you move ("Move your phone right"); once it's centered the app zooms in to fill the frame and shows the shot's name and a tip. Then you press the shutter and edit.
 
 ## How it works
 
-1. **Plan:** the app grabs the wide view and sends it to `/api/coach` with the vibe and the phone's current tilt. Claude answers via a forced tool call (`suggest_shot`) with 0–3 steps (position → height → tilt), plus a crop, a label and a tip. It uses Instagram techniques for places (shooting up at palms and buildings, symmetry, leading lines, layers, framing) and for food and products (overhead flat lay, 45° hero angle, straight on, close texture, clean backgrounds).
-2. **Steps:** each step shows as a card. Tilt steps carry a target angle that the phone's orientation sensor checks live, with a gauge and "Tilt up 12° more"; they complete themselves once you hold the angle. Position and height steps get a Done button.
-3. **Re-check:** after the steps, Claude looks once more at the new angle and returns the final crop.
-4. **Frame:** an on-device motion tracker (`lib/tracker.ts`) keeps the yellow box pinned to the scene while you move ("Move your phone right"). When the box is centered, the app zooms until it fills the viewfinder and shows the label and tip.
-5. **Edit:** the editor opens with the vibe's Look preselected. Looks: Clean, Moody, Cinematic, Harbor, Dusk, Press, Film, Glow, Mono. Adjust, Effects (grain, vignette) and Frames are also available, and Save shares or downloads the photo.
+1. **Scan:** the app zooms out to the widest view, grabs exactly what's in the viewfinder and sends it to `/api/coach` with the vibe. Claude answers via a forced tool call (`suggest_shot`) with a crop box in the viewfinder's aspect ratio, a label and a tip. It's tuned for places and for food and products.
+2. **Guide:** an on-device motion tracker (`lib/tracker.ts`, coarse-to-fine block matching on tiny grayscale frames, ~30 fps) keeps the box pinned to the scene while you move. That includes the ~2 s while Claude is thinking.
+3. **Frame:** when the box is centered, the app smoothly zooms (hardware zoom on Android Chrome, digital crop elsewhere) until the box fills the viewfinder, then shows the green label and tip.
+4. **Edit:** the editor opens with the vibe's Look preselected. Looks: Clean, Moody, Cinematic, Harbor, Dusk, Press, Film, Glow, Mono. Adjust, Effects (grain, vignette) and Frames are also available, and Save shares or downloads the photo.
 
 ## Deploy to Vercel
 

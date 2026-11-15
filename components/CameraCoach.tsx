@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ASPECTS, VIBES, VIBE_IDS, aspectRatio, vibeLook, type Aspect, type Box, type ScanResult, type Step, type VibeId } from "@/lib/types";
+import { ASPECTS, VIBES, VIBE_IDS, aspectRatio, vibeLook, type Aspect, type Box, type ScanResult, type VibeId } from "@/lib/types";
 import { MotionTracker, type Crop } from "@/lib/tracker";
 import Editor from "./Editor";
 import Gallery, { type Photo } from "./Gallery";
 
 type Phase = "intro" | "starting" | "live" | "error";
-type Mode = "idle" | "scanning" | "steps" | "guiding" | "framing" | "locked" | "lost";
+type Mode = "idle" | "scanning" | "guiding" | "framing" | "locked" | "lost";
 type Facing = "environment" | "user";
 type Zoom = { value: number; min: number; max: number; hardware: boolean };
 type Tone = "muted" | "guide" | "good";
@@ -16,7 +16,6 @@ const DIGITAL_MAX = 4;
 const SCAN_LONG_SIDE = 1024;
 const CENTER_TOL = 0.05;
 const IDLE_HINT = "Tap ✦ to scan a new scene";
-const TILT_TOL = 6;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const scaleBox = (b: Box, r: number): Box => {
@@ -41,10 +40,6 @@ export default function CameraCoach() {
   const scanToken = useRef(0);
   const statusRef = useRef("");
   const toastTimer = useRef<number | undefined>(undefined);
-  const elevRef = useRef<number | null>(null);
-  const stepsRef = useRef<Step[]>([]);
-  const alignedSince = useRef(0);
-  const stepIdxRef = useRef(0);
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [error, setError] = useState("");
@@ -63,13 +58,6 @@ export default function CameraCoach() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [viewer, setViewer] = useState<number | null>(null);
   const [vibe, setVibeState] = useState<VibeId>("clean");
-  const [steps, setStepsState] = useState<Step[]>([]);
-  const [stepIdx, setStepIdxState] = useState(0);
-  const setStepIdx = (i: number) => {
-    stepIdxRef.current = i;
-    setStepIdxState(i);
-  };
-  const [elev, setElev] = useState<number | null>(null);
 
   const mirror = facing === "user";
 
@@ -86,10 +74,6 @@ export default function CameraCoach() {
     if (statusRef.current === text + tone) return;
     statusRef.current = text + tone;
     setStatusState({ text, tone });
-  };
-  const setSteps = (st: Step[]) => {
-    stepsRef.current = st;
-    setStepsState(st);
   };
   const setVibe = (v: VibeId) => {
     setVibeState(v);
@@ -317,8 +301,6 @@ export default function CameraCoach() {
     positionBox(null);
     anchorRef.current = null;
     setScan(null);
-    setSteps([]);
-    setStepIdx(0);
     setMode("idle");
     setStatus(IDLE_HINT, "muted");
   };
@@ -345,16 +327,13 @@ export default function CameraCoach() {
     lockShot(result);
   };
 
-  const startScan = async (final = false) => {
+  const startScan = async () => {
     const token = ++scanToken.current;
-    const followed = stepsRef.current.map((st) => st.text);
     setScan(null);
-    setSteps([]);
-    setStepIdx(0);
     positionBox(null);
     anchorRef.current = null;
     setMode("scanning");
-    setStatus(final ? "Checking your new angle…" : "Finding your shot…", "guide");
+    setStatus("Finding your shot…", "guide");
 
     // Always scan from the widest view so Claude has the most to choose from.
     if (zoomRef.current.value > zoomRef.current.min + 0.01) {
@@ -383,9 +362,6 @@ export default function CameraCoach() {
           maxZoomRatio: z.max / z.value,
           camera: mirror ? "front" : "back",
           vibe,
-          mode: final ? "final" : "plan",
-          elevation: elevRef.current,
-          previousSteps: final ? followed : undefined,
         }),
       });
       const data = await res.json();
@@ -394,15 +370,6 @@ export default function CameraCoach() {
       const result = data as ScanResult;
       setScan(result);
 
-      if (!final && result.steps.length) {
-        // Angle/position moves first; we re-check the frame once they're done.
-        setSteps(result.steps);
-        setStepIdx(0);
-        alignedSince.current = 0;
-        setMode("steps");
-        navigator.vibrate?.(15);
-        return;
-      }
       if (result.box.w >= 0.92) return lockShot(result); // the whole frame is already the shot
       anchorRef.current = { box: result.box, shift: { x: 0, y: 0 } };
       centeredSince.current = 0;
@@ -416,49 +383,9 @@ export default function CameraCoach() {
 
   const onSparkle = () => {
     const m = modeRef.current;
-    if (m === "scanning" || m === "steps" || m === "guiding" || m === "framing") cancelScan();
+    if (m === "scanning" || m === "guiding" || m === "framing") cancelScan();
     else startScan();
   };
-
-  // ---------- angle / position steps ----------
-  const nextStep = () => {
-    navigator.vibrate?.(20);
-    alignedSince.current = 0;
-    const n = stepIdxRef.current + 1;
-    if (n >= stepsRef.current.length) {
-      setStatus("Checking your new angle…", "guide");
-      setTimeout(() => startScan(true), 250);
-    } else setStepIdx(n);
-  };
-
-  const currentStep = mode === "steps" ? steps[stepIdx] : undefined;
-  const portrait = typeof window !== "undefined" ? window.innerHeight >= window.innerWidth : true;
-  const liveTilt = !!currentStep && currentStep.kind === "tilt" && currentStep.target_elevation != null && elev != null && portrait;
-  const tiltDelta = liveTilt ? currentStep!.target_elevation! - elev! : 0;
-
-  useEffect(() => {
-    if (mode !== "steps" || !currentStep) return;
-    if (!liveTilt) {
-      setStatus(currentStep.text, "guide");
-      return;
-    }
-    if (Math.abs(tiltDelta) <= TILT_TOL) {
-      setStatus("Hold it there…", "good");
-      const now = performance.now();
-      if (!alignedSince.current) alignedSince.current = now;
-      else if (now - alignedSince.current >= 550) {
-        nextStep();
-        return;
-      }
-      const t = setTimeout(() => {
-        if (alignedSince.current && performance.now() - alignedSince.current >= 550) nextStep();
-      }, 600);
-      return () => clearTimeout(t);
-    }
-    alignedSince.current = 0;
-    setStatus(`Tilt ${tiltDelta > 0 ? "up" : "down"} ${Math.round(Math.abs(tiltDelta))}° more`, "guide");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, stepIdx, liveTilt, Math.round(tiltDelta)]);
 
   // ---------- tracking loop: keeps the box pinned to the scene ----------
   const frameShotRef = useRef(frameShot);
@@ -514,27 +441,6 @@ export default function CameraCoach() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, getCrop, mirror]);
 
-  // ---------- camera elevation (pitch) for tilt steps ----------
-  useEffect(() => {
-    if (phase !== "live") return;
-    let last = 0;
-    const onOrient = (e: DeviceOrientationEvent) => {
-      if (e.beta == null) return;
-      // Portrait: beta 90 = upright (camera level), 0 = flat face-up (back camera points down).
-      const back = e.beta - 90;
-      const value = mirror ? -back : back;
-      const v = Math.max(-90, Math.min(90, value));
-      elevRef.current = v;
-      const now = performance.now();
-      if (now - last > 80) {
-        last = now;
-        setElev(Math.round(v));
-      }
-    };
-    window.addEventListener("deviceorientation", onOrient);
-    return () => window.removeEventListener("deviceorientation", onOrient);
-  }, [phase, mirror]);
-
   // ---------- horizon level ----------
   useEffect(() => {
     if (phase !== "live") return;
@@ -586,7 +492,7 @@ export default function CameraCoach() {
   // ---------- render ----------
   const level = tilt != null && Math.abs(tilt) < 1.2;
   const digitalScale = zoom.hardware ? 1 : zoom.value;
-  const busy = mode === "scanning" || mode === "steps" || mode === "guiding" || mode === "framing";
+  const busy = mode === "scanning" || mode === "guiding" || mode === "framing";
 
 
   return (
@@ -634,38 +540,6 @@ export default function CameraCoach() {
               <div className="shot-box" ref={boxRef} style={{ opacity: 0 }}>
                 {scan && mode !== "framing" && <span className="shot-label">{scan.label}</span>}
               </div>
-
-              {currentStep && (
-                <div className="step-card" key={stepIdx}>
-                  <div className="step-dots">
-                    {steps.map((_, i) => (
-                      <i key={i} className={i < stepIdx ? "done" : i === stepIdx ? "cur" : ""} />
-                    ))}
-                  </div>
-                  <div className="step-row">
-                    <span className="step-icon">{currentStep.kind === "position" ? "⇆" : currentStep.kind === "height" ? "⇕" : "∠"}</span>
-                    <p>{currentStep.text}</p>
-                  </div>
-                  <div className="step-actions">
-                    <button className="step-skip" onClick={nextStep}>
-                      Skip
-                    </button>
-                    {!liveTilt && (
-                      <button className="step-done" onClick={nextStep}>
-                        Done
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {liveTilt && (
-                <div className={`tilt-gauge ${Math.abs(tiltDelta) <= TILT_TOL ? "ok" : ""}`} aria-hidden>
-                  <span className="tilt-target" />
-                  <span className="tilt-now" style={{ transform: `translateY(${Math.max(-1, Math.min(1, tiltDelta / 45)) * 70}px)` }} />
-                  <small>{Math.abs(tiltDelta) <= TILT_TOL ? "✓" : tiltDelta > 0 ? "↑" : "↓"}</small>
-                </div>
-              )}
 
               {mode === "locked" && scan && (
                 <button className="chip" onClick={() => showToast(scan.why)}>
@@ -748,7 +622,7 @@ export default function CameraCoach() {
               Frame<span>Coach</span>
             </h1>
             <p>
-              Pick a vibe, tap <b>✦</b>, and Claude coaches your angle, where to stand and the crop for an Instagram-worthy shot of places, food and products.
+              Pick a vibe and tap <b>✦</b>. Claude finds the most Instagram-worthy shot in your scene, guides your phone to it and zooms in.
             </p>
             {phase === "error" && <p className="err">{error}</p>}
             <button className="start-btn" onClick={onStart} disabled={phase === "starting"}>

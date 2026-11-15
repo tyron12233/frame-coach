@@ -22,20 +22,12 @@ export const aspectRatio = (a: Aspect) => {
 /** Normalized box in frame coordinates (0..1), top-left origin. */
 export type Box = { x: number; y: number; w: number; h: number };
 
-export type StepKind = "position" | "height" | "tilt";
-export type Step = {
-  kind: StepKind;
-  text: string; // short imperative, e.g. "Take two steps left"
-  target_elevation: number | null; // tilt only: camera angle above horizon after the move (-90 down … 90 up)
-};
-
 export type ScanResult = {
   box: Box; // the best shot hidden in the current frame (same aspect as the viewfinder)
   label: string; // 2–4 words naming the shot, e.g. "golden hour palms"
   tip: string; // short, warm line shown once framed
   why: string; // one sentence on why this works
   score: number; // 1–10
-  steps: Step[]; // angle/position moves to make first (empty = just crop)
 };
 
 export type ScanRequest = {
@@ -45,7 +37,4 @@ export type ScanRequest = {
   maxZoomRatio: number;
   camera: "back" | "front";
   vibe: VibeId;
-  mode: "plan" | "final"; // final = re-check after the user followed the steps
-  elevation: number | null; // current camera angle above horizon, degrees
-  previousSteps?: string[];
 };
