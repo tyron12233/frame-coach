@@ -22,6 +22,7 @@ Point your phone camera, tap **Coach me**, and Claude looks at the frame and tel
 2. In Vercel: **Add New → Project → Import** the repo (framework is auto-detected as Next.js).
 3. Under **Environment Variables**, add:
    - `ANTHROPIC_API_KEY`: your key from console.anthropic.com
+   - `ANTHROPIC_WORKSPACE_ID` (only if your key isn't scoped to a workspace, e.g. `sk-ant-usr-…` keys): the `wrkspc_…` ID from Console → Settings → Workspaces
    - `CLAUDE_MODEL` (optional): `claude-haiku-5-5` (default, fastest) or `claude-sonnet-5-5` (richer advice)
 4. Deploy, then open the URL on your phone. The camera needs HTTPS, which Vercel provides.
 

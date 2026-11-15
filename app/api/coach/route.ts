@@ -70,7 +70,11 @@ const TOOL: Anthropic.Tool = {
 
 let client: Anthropic | null = null;
 function getClient() {
-  if (!client) client = new Anthropic();
+  if (!client) {
+    // User-level keys (sk-ant-usr-…) aren't tied to a workspace, so the workspace must be named per request.
+    const workspace = process.env.ANTHROPIC_WORKSPACE_ID;
+    client = new Anthropic(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {});
+  }
   return client;
 }
 
