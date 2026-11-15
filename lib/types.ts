@@ -1,58 +1,26 @@
-export const MOVES = [
-  "move_left",
-  "move_right",
-  "move_closer",
-  "step_back",
-  "raise_camera",
-  "lower_camera",
-  "tilt_up",
-  "tilt_down",
-  "pan_left",
-  "pan_right",
-  "rotate_clockwise",
-  "rotate_counterclockwise",
-  "go_landscape",
-  "go_portrait",
-] as const;
+export const LOOK_IDS = ["clean", "harbor", "dusk", "press", "film", "glow", "mono"] as const;
+export type LookId = (typeof LOOK_IDS)[number];
 
-export type Move = (typeof MOVES)[number];
+export type Aspect = "3:4" | "9:16" | "1:1";
+export const ASPECTS: Aspect[] = ["3:4", "9:16", "1:1"];
+export const aspectRatio = (a: Aspect) => (a === "3:4" ? 3 / 4 : a === "9:16" ? 9 / 16 : 1); // width / height
 
-export type Point = { x: number; y: number };
+/** Normalized box in frame coordinates (0..1), top-left origin. */
+export type Box = { x: number; y: number; w: number; h: number };
 
-export type Coaching = {
-  score: number; // 1–10
-  scene: string; // short description of what Claude sees
-  verdict: "adjust" | "take_it";
-  headline: string; // short, spoken tip
-  issues: string[]; // up to 3 short observations
-  moves: Move[]; // up to 3 physical moves, most important first
-  zoom_factor: number; // relative zoom: 1 = keep, >1 zoom in, <1 zoom out
-  subject: Point | null; // where the main subject is now (0–1, frame coords)
-  target: Point | null; // where the subject should sit (0–1, frame coords)
-  progress: "first" | "better" | "same" | "worse";
+export type ScanResult = {
+  box: Box; // the best shot hidden in the current frame (same aspect as the viewfinder)
+  label: string; // 2–4 words naming the shot, e.g. "golden hour palms"
+  tip: string; // short, warm line shown once framed, e.g. "Beautiful light, capture the glow."
+  why: string; // one sentence on why this crop works
+  look: LookId; // suggested edit preset
+  score: number; // 1–10 for the suggested shot
 };
 
-export type CoachRequest = {
-  image: string; // base64 JPEG (no data: prefix)
-  orientation: "portrait" | "landscape";
-  zoom: number; // current zoom level
-  camera?: "back" | "front";
-  previous?: Coaching | null;
-};
-
-export const MOVE_LABELS: Record<Move, { label: string; icon: string }> = {
-  move_left: { label: "Step left", icon: "←" },
-  move_right: { label: "Step right", icon: "→" },
-  move_closer: { label: "Move closer", icon: "⇡" },
-  step_back: { label: "Step back", icon: "⇣" },
-  raise_camera: { label: "Raise camera", icon: "↑" },
-  lower_camera: { label: "Lower camera", icon: "↓" },
-  tilt_up: { label: "Tilt up", icon: "⤴" },
-  tilt_down: { label: "Tilt down", icon: "⤵" },
-  pan_left: { label: "Turn left", icon: "↶" },
-  pan_right: { label: "Turn right", icon: "↷" },
-  rotate_clockwise: { label: "Rotate clockwise", icon: "↻" },
-  rotate_counterclockwise: { label: "Rotate counter-clockwise", icon: "↺" },
-  go_landscape: { label: "Turn sideways", icon: "▭" },
-  go_portrait: { label: "Hold upright", icon: "▯" },
+export type ScanRequest = {
+  image: string; // base64 JPEG, no data: prefix
+  aspect: Aspect;
+  zoom: number; // current zoom
+  maxZoomRatio: number; // how much further we can zoom in from here
+  camera: "back" | "front";
 };
